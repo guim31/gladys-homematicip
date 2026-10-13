@@ -1,45 +1,54 @@
 // -----------------------------------------------------------------------------
-// Integration configuration.
+// Integration configuration: defaults (they mirror the `default` values of the
+// manifest `config_schema`, see test/manifest.test.js) and normalization, so
+// the rest of the code never deals with strings, blanks or `undefined`.
 //
-// The configuration is filled in by the user in Gladys, from the `config_schema`
-// declared in `gladys-assistant-integration.json`. The SDK fetches it for you
-// (`gladys.getConfig()`) and notifies you of every change through
-// `gladys.onConfigUpdated()`.
-//
-// This module only provides defaults and normalizes the received object, so the
-// rest of the code never has to deal with `undefined`.
+// The authorization token is not here: the pairing writes it under /data
+// (src/store.js), it never goes through the Gladys configuration.
 // -----------------------------------------------------------------------------
 
-// Defaults: they MUST stay consistent with the `default` values declared in the
-// `config_schema` of the manifest.
+export const LANGUAGES = ['en', 'fr', 'de', 'es'];
+
+// Who may change the alarm system from Gladys. Off by default: arming and,
+// above all, disarming a security system is the user's explicit choice.
+export const ALARM_CONTROL = ['off', 'arm', 'arm_disarm'];
+
 export const DEFAULT_CONFIG = {
-  latitude: 48.8566, // Paris
-  longitude: 2.3522,
-  unit: 'celsius', // 'celsius' | 'fahrenheit'
-  // Seconds between two reads of the polled sensors. Gladys polls at most once
-  // a minute: slower intervals are applied by skipping polls (see
-  // createPoller in src/devices/index.js).
-  poll_frequency: 300,
-  // Reserved key (NOT in config_schema): because the manifest declares both
-  // 'local' and 'cloud' in its `transports` field, Gladys shows a standard
-  // "Prefer the local connection" toggle and sends the user's choice here.
-  // Read-only for the integration; defaults to true.
-  GLADYS_PREFER_LOCAL: true,
+  access_point: '',
+  pin: '',
+  language: 'fr',
+  alarm_control: 'off',
 };
 
 /**
- * Merge the user config with the defaults.
- * @param {Record<string, unknown>} raw config returned by the SDK
+ * The access point SGTIN as the cloud expects it: 24 hexadecimal characters,
+ * upper case. The label under the access point prints it in groups
+ * (3014-F711-A000-...): dashes, spaces and dots are dropped.
+ * @returns {string | null} null when it is not one
+ */
+export function parseAccessPointId(raw) {
+  if (typeof raw !== 'string') {
+    return null;
+  }
+  const compact = raw.replace(/[\s.:_-]/g, '').toUpperCase();
+  return /^[0-9A-F]{24}$/.test(compact) ? compact : null;
+}
+
+/**
+ * @param {Record<string, unknown>} raw the configuration returned by the SDK
  */
 export function normalizeConfig(raw = {}) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const typed = typeof source.access_point === 'string' ? source.access_point.trim() : '';
+  const pin = typeof source.pin === 'string' ? source.pin.trim() : '';
   return {
-    ...DEFAULT_CONFIG,
-    ...raw,
-    // Force the types: config may arrive as strings from a form.
-    latitude: Number(raw.latitude ?? DEFAULT_CONFIG.latitude),
-    longitude: Number(raw.longitude ?? DEFAULT_CONFIG.longitude),
-    poll_frequency: Number(raw.poll_frequency ?? DEFAULT_CONFIG.poll_frequency),
-    // The preference is a boolean; anything but an explicit false means true.
-    GLADYS_PREFER_LOCAL: raw.GLADYS_PREFER_LOCAL !== false,
+    accessPoint: parseAccessPointId(typed),
+    // What the user typed, when it is not an SGTIN: said in the status.
+    invalidAccessPoint: typed !== '' && parseAccessPointId(typed) === null,
+    pin: pin === '' ? null : pin,
+    language: LANGUAGES.includes(source.language) ? source.language : DEFAULT_CONFIG.language,
+    alarmControl: ALARM_CONTROL.includes(source.alarm_control)
+      ? source.alarm_control
+      : DEFAULT_CONFIG.alarm_control,
   };
 }

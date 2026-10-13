@@ -1,177 +1,556 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "Homematic IP",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Homematic IP through the cloud: heating, contacts, sensors, plugs, shutters, alarm.",
+    "fr": "Homematic IP par le cloud : chauffage, contacts, capteurs, prises, volets, alarme.",
+    "de": "Homematic IP über die Cloud: Heizung, Kontakte, Sensoren, Steckdosen, Rollläden, Alarm.",
+    "es": "Homematic IP por la nube: calefacción, contactos, sensores, enchufes, persianas, alarma."
   },
   "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "docker_image": "ghcr.io/guim31/gladys-homematicip:1.0.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/guim31/gladys-homematicip/main/cover.png",
+  "categories": ["climate", "security"],
+  "transports": ["cloud"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Connect your access point",
+        "fr": "Connecter votre point d'accès",
+        "de": "Deinen Access Point verbinden",
+        "es": "Conectar su punto de acceso"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "Gladys reaches your Homematic IP access point (HmIP-HAP) through the Homematic IP cloud, like the app. 1. Type its SGTIN (printed under the access point) and save. 2. Click \"Start pairing\". 3. Press the blue button on top of the access point, then click \"I pressed the button\". 4. Add the devices from the Discovery tab.",
+        "fr": "Gladys rejoint votre point d'accès Homematic IP (HmIP-HAP) par le cloud Homematic IP, comme l'application. 1. Saisissez son SGTIN (imprimé sous le point d'accès) et enregistrez. 2. Cliquez sur « Démarrer l'appairage ». 3. Appuyez sur le bouton bleu sur le dessus du point d'accès, puis cliquez sur « J'ai appuyé sur le bouton ». 4. Ajoutez les appareils depuis l'onglet Découverte.",
+        "de": "Gladys erreicht deinen Homematic IP Access Point (HmIP-HAP) über die Homematic IP Cloud, wie die App. 1. Gib seine SGTIN ein (steht auf der Unterseite des Access Points) und speichere. 2. Klicke auf „Kopplung starten“. 3. Drücke die blaue Taste oben auf dem Access Point und klicke dann auf „Ich habe die Taste gedrückt“. 4. Füge die Geräte im Tab „Entdecken“ hinzu.",
+        "es": "Gladys llega a su punto de acceso Homematic IP (HmIP-HAP) a través de la nube Homematic IP, como la aplicación. 1. Introduzca su SGTIN (impreso debajo del punto de acceso) y guarde. 2. Haga clic en «Iniciar el emparejamiento». 3. Pulse el botón azul de la parte superior del punto de acceso y luego haga clic en «He pulsado el botón». 4. Añada los dispositivos desde la pestaña Descubrir."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://github.com/guim31/gladys-homematicip/blob/main/docs/en.md",
+          "label": {
+            "en": "Setup guide",
+            "fr": "Guide d'installation",
+            "de": "Installationsanleitung",
+            "es": "Guía de instalación"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+      "key": "access_point",
+      "type": "string",
+      "label": {
+        "en": "Access point SGTIN",
+        "fr": "SGTIN du point d'accès",
+        "de": "SGTIN des Access Points",
+        "es": "SGTIN del punto de acceso"
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "description": {
+        "en": "24 characters printed under the access point and on its sticker, dashes allowed.",
+        "fr": "24 caractères imprimés sous le point d'accès et sur son autocollant, tirets acceptés.",
+        "de": "24 Zeichen auf der Unterseite des Access Points und auf seinem Aufkleber, Bindestriche erlaubt.",
+        "es": "24 caracteres impresos debajo del punto de acceso y en su pegatina, guiones permitidos."
+      },
+      "placeholder": {
+        "en": "e.g. 3014-F711-A000-0000-0000-0000",
+        "fr": "ex. 3014-F711-A000-0000-0000-0000",
+        "de": "z. B. 3014-F711-A000-0000-0000-0000",
+        "es": "p. ej. 3014-F711-A000-0000-0000-0000"
+      },
+      "required": true
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
+      "key": "pin",
+      "type": "secret",
+      "label": {
+        "en": "Access point PIN",
+        "fr": "Code PIN du point d'accès",
+        "de": "PIN des Access Points",
+        "es": "PIN del punto de acceso"
       },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
+      "description": {
+        "en": "Only if you set a PIN in the Homematic IP app. Used for the pairing only.",
+        "fr": "Seulement si vous avez défini un code PIN dans l'application Homematic IP. Sert à l'appairage uniquement.",
+        "de": "Nur wenn du in der Homematic IP App eine PIN festgelegt hast. Dient nur der Kopplung.",
+        "es": "Solo si ha definido un PIN en la aplicación Homematic IP. Solo sirve para el emparejamiento."
+      },
+      "required": false
     },
     {
-      "key": "unit",
+      "key": "language",
       "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
+      "label": {
+        "en": "Language of the device names",
+        "fr": "Langue des noms des appareils",
+        "de": "Sprache der Gerätenamen",
+        "es": "Idioma de los nombres de los dispositivos"
+      },
+      "description": {
+        "en": "Names given to the features of new devices (Temperature, Set point, Opening...).",
+        "fr": "Noms donnés aux fonctionnalités des nouveaux appareils (Température, Consigne, Ouverture…).",
+        "de": "Namen, die den Funktionen neuer Geräte gegeben werden (Temperatur, Solltemperatur, Kontakt…).",
+        "es": "Nombres dados a las funciones de los nuevos dispositivos (Temperatura, Consigna, Apertura…)."
+      },
       "required": false,
-      "default": "celsius",
+      "default": "fr",
       "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
+        {
+          "value": "en",
+          "label": {
+            "en": "English",
+            "fr": "Anglais",
+            "de": "Englisch",
+            "es": "Inglés"
+          }
+        },
+        {
+          "value": "fr",
+          "label": {
+            "en": "French",
+            "fr": "Français",
+            "de": "Französisch",
+            "es": "Francés"
+          }
+        },
+        {
+          "value": "de",
+          "label": {
+            "en": "German",
+            "fr": "Allemand",
+            "de": "Deutsch",
+            "es": "Alemán"
+          }
+        },
+        {
+          "value": "es",
+          "label": {
+            "en": "Spanish",
+            "fr": "Espagnol",
+            "de": "Spanisch",
+            "es": "Español"
+          }
+        }
       ]
     },
     {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "key": "alarm_control",
+      "type": "select",
+      "label": {
+        "en": "Alarm control",
+        "fr": "Pilotage de l'alarme",
+        "de": "Steuerung der Alarmanlage",
+        "es": "Control de la alarma"
+      },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+        "en": "What Gladys may do with the Homematic IP alarm system. Reading it is always possible.",
+        "fr": "Ce que Gladys peut faire avec le système d'alarme Homematic IP. Le lire reste toujours possible.",
+        "de": "Was Gladys mit der Homematic IP Alarmanlage tun darf. Lesen ist immer möglich.",
+        "es": "Lo que Gladys puede hacer con el sistema de alarma Homematic IP. Leerlo siempre es posible."
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": "off",
+      "options": [
+        {
+          "value": "off",
+          "label": {
+            "en": "Read only",
+            "fr": "Lecture seule",
+            "de": "Nur lesen",
+            "es": "Solo lectura"
+          }
+        },
+        {
+          "value": "arm",
+          "label": {
+            "en": "Arm only",
+            "fr": "Armer seulement",
+            "de": "Nur scharf schalten",
+            "es": "Solo armar"
+          }
+        },
+        {
+          "value": "arm_disarm",
+          "label": {
+            "en": "Arm and disarm",
+            "fr": "Armer et désarmer",
+            "de": "Scharf und unscharf schalten",
+            "es": "Armar y desarmar"
+          }
+        }
+      ]
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
+      "key": "start_pairing",
+      "label": {
+        "en": "Start pairing",
+        "fr": "Démarrer l'appairage",
+        "de": "Kopplung starten",
+        "es": "Iniciar el emparejamiento"
+      },
+      "description": {
+        "en": "Type and save the SGTIN first. Then press the blue button of the access point when asked.",
+        "fr": "Saisissez et enregistrez d'abord le SGTIN. Appuyez ensuite sur le bouton bleu du point d'accès quand c'est demandé.",
+        "de": "Gib zuerst die SGTIN ein und speichere sie. Drücke dann die blaue Taste des Access Points, wenn du dazu aufgefordert wirst.",
+        "es": "Introduzca y guarde primero el SGTIN. Luego pulse el botón azul del punto de acceso cuando se le pida."
+      },
       "timeout_seconds": 30
     },
     {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
+      "key": "confirm_pairing",
+      "label": {
+        "en": "I pressed the button",
+        "fr": "J'ai appuyé sur le bouton",
+        "de": "Ich habe die Taste gedrückt",
+        "es": "He pulsado el botón"
+      },
+      "description": {
+        "en": "After \"Start pairing\" and a press on the blue button of the access point.",
+        "fr": "Après « Démarrer l'appairage » et un appui sur le bouton bleu du point d'accès.",
+        "de": "Nach „Kopplung starten“ und einem Druck auf die blaue Taste des Access Points.",
+        "es": "Después de «Iniciar el emparejamiento» y de pulsar el botón azul del punto de acceso."
+      },
+      "timeout_seconds": 60
+    },
+    {
+      "key": "refresh",
+      "label": {
+        "en": "Read the home again",
+        "fr": "Relire la maison",
+        "de": "Zuhause neu lesen",
+        "es": "Volver a leer la casa"
+      },
+      "description": {
+        "en": "Reads every device and room now, and shows what was found.",
+        "fr": "Lit maintenant tous les appareils et toutes les pièces, et affiche ce qui a été trouvé.",
+        "de": "Liest jetzt alle Geräte und Räume und zeigt, was gefunden wurde.",
+        "es": "Lee ahora todos los dispositivos y habitaciones, y muestra lo encontrado."
+      },
+      "timeout_seconds": 60
     }
   ],
   "scene_triggers": [
     {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "alarm_triggered",
+      "label": {
+        "en": "Homematic IP alarm triggered",
+        "fr": "Alarme Homematic IP déclenchée",
+        "de": "Homematic IP Alarm ausgelöst",
+        "es": "Alarma Homematic IP disparada"
+      },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "The armed alarm system went off, with the sensor and the cause it reports.",
+        "fr": "Le système d'alarme armé s'est déclenché, avec le détecteur et la cause qu'il indique.",
+        "de": "Die scharf geschaltete Alarmanlage hat ausgelöst, mit dem Melder und der gemeldeten Ursache.",
+        "es": "El sistema de alarma armado se ha disparado, con el detector y la causa que indica."
       },
       "fields": [
         {
           "key": "device",
           "type": "select",
           "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
+          "label": {
+            "en": "Sensor (any when empty)",
+            "fr": "Détecteur (n'importe lequel si vide)",
+            "de": "Melder (beliebig, wenn leer)",
+            "es": "Detector (cualquiera si está vacío)"
+          }
         },
         {
-          "key": "target",
+          "key": "cause",
           "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
+          "label": {
+            "en": "Cause (any when empty)",
+            "fr": "Cause (n'importe laquelle si vide)",
+            "de": "Ursache (beliebig, wenn leer)",
+            "es": "Causa (cualquiera si está vacía)"
+          },
           "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
+            {
+              "value": "intrusion",
+              "label": {
+                "en": "Intrusion",
+                "fr": "Intrusion",
+                "de": "Einbruch",
+                "es": "Intrusión"
+              }
+            },
+            {
+              "value": "smoke",
+              "label": {
+                "en": "Smoke",
+                "fr": "Fumée",
+                "de": "Rauch",
+                "es": "Humo"
+              }
+            },
+            {
+              "value": "water",
+              "label": {
+                "en": "Water",
+                "fr": "Eau",
+                "de": "Wasser",
+                "es": "Agua"
+              }
+            },
+            {
+              "value": "sabotage",
+              "label": {
+                "en": "Sabotage",
+                "fr": "Sabotage",
+                "de": "Sabotage",
+                "es": "Sabotaje"
+              }
+            },
+            {
+              "value": "other",
+              "label": {
+                "en": "Other",
+                "fr": "Autre",
+                "de": "Andere",
+                "es": "Otra"
+              }
+            }
           ]
         }
       ],
       "variables": [
         {
-          "key": "target",
+          "key": "sensor",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
+          "label": {
+            "en": "Sensor name",
+            "fr": "Nom du détecteur",
+            "de": "Name des Melders",
+            "es": "Nombre del detector"
+          }
+        },
+        {
+          "key": "cause",
+          "type": "string",
+          "label": {
+            "en": "Cause",
+            "fr": "Cause",
+            "de": "Ursache",
+            "es": "Causa"
+          }
         }
       ]
     }
   ],
   "scene_actions": [
     {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
+      "key": "start_absence",
+      "label": {
+        "en": "Start the Homematic IP eco mode",
+        "fr": "Lancer le mode éco Homematic IP",
+        "de": "Homematic IP Eco-Modus starten",
+        "es": "Iniciar el modo eco Homematic IP"
       },
-      "timeout_seconds": 15,
+      "description": {
+        "en": "Every room at its eco temperature (absence), for a number of hours or until ended.",
+        "fr": "Toutes les pièces à leur température éco (absence), pour quelques heures ou jusqu'à la fin.",
+        "de": "Alle Räume auf ihrer Eco-Temperatur (Abwesenheit), für einige Stunden oder bis zum Beenden.",
+        "es": "Todas las habitaciones a su temperatura eco (ausencia), durante unas horas o hasta que se termine."
+      },
+      "timeout_seconds": 30,
       "fields": [
         {
-          "key": "device",
+          "key": "duration",
+          "type": "number",
+          "label": {
+            "en": "Duration in hours (0: until ended)",
+            "fr": "Durée en heures (0 : jusqu'à la fin)",
+            "de": "Dauer in Stunden (0: bis zum Beenden)",
+            "es": "Duración en horas (0: hasta que se termine)"
+          },
+          "required": false,
+          "default": 0,
+          "min": 0,
+          "max": 720
+        }
+      ]
+    },
+    {
+      "key": "start_vacation",
+      "label": {
+        "en": "Start the Homematic IP vacation mode",
+        "fr": "Lancer le mode vacances Homematic IP",
+        "de": "Homematic IP Urlaubsmodus starten",
+        "es": "Iniciar el modo vacaciones Homematic IP"
+      },
+      "description": {
+        "en": "Every room at one temperature for a number of days, then back to the programme.",
+        "fr": "Toutes les pièces à une même température pendant quelques jours, puis retour au programme.",
+        "de": "Alle Räume einige Tage auf einer Temperatur, danach zurück zum Programm.",
+        "es": "Todas las habitaciones a una misma temperatura durante unos días, luego vuelta al programa."
+      },
+      "timeout_seconds": 30,
+      "fields": [
+        {
+          "key": "days",
+          "type": "number",
+          "label": {
+            "en": "Days",
+            "fr": "Jours",
+            "de": "Tage",
+            "es": "Días"
+          },
+          "required": true,
+          "default": 7,
+          "min": 1,
+          "max": 365
+        },
+        {
+          "key": "temperature",
+          "type": "number",
+          "label": {
+            "en": "Temperature (°C)",
+            "fr": "Température (°C)",
+            "de": "Temperatur (°C)",
+            "es": "Temperatura (°C)"
+          },
+          "required": true,
+          "default": 15,
+          "min": 5,
+          "max": 30
+        }
+      ]
+    },
+    {
+      "key": "end_absence",
+      "label": {
+        "en": "End the Homematic IP eco or vacation mode",
+        "fr": "Terminer le mode éco ou vacances Homematic IP",
+        "de": "Homematic IP Eco- oder Urlaubsmodus beenden",
+        "es": "Terminar el modo eco o vacaciones Homematic IP"
+      },
+      "description": {
+        "en": "Back to the normal programme of every room.",
+        "fr": "Retour au programme normal de toutes les pièces.",
+        "de": "Zurück zum normalen Programm aller Räume.",
+        "es": "Vuelta al programa normal de todas las habitaciones."
+      },
+      "timeout_seconds": 30
+    },
+    {
+      "key": "set_alarm_mode",
+      "label": {
+        "en": "Set the Homematic IP alarm",
+        "fr": "Régler l'alarme Homematic IP",
+        "de": "Homematic IP Alarmanlage schalten",
+        "es": "Ajustar la alarma Homematic IP"
+      },
+      "description": {
+        "en": "Only within what \"Alarm control\" allows in the configuration (nothing by default).",
+        "fr": "Seulement dans ce que « Pilotage de l'alarme » autorise dans la configuration (rien par défaut).",
+        "de": "Nur im Rahmen dessen, was „Steuerung der Alarmanlage“ in der Konfiguration erlaubt (standardmäßig nichts).",
+        "es": "Solo dentro de lo que «Control de la alarma» permite en la configuración (nada por defecto)."
+      },
+      "timeout_seconds": 30,
+      "fields": [
+        {
+          "key": "mode",
           "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
+          "label": {
+            "en": "Mode",
+            "fr": "Mode",
+            "de": "Modus",
+            "es": "Modo"
+          },
+          "required": true,
+          "options": [
+            {
+              "value": "disarmed",
+              "label": {
+                "en": "Disarmed",
+                "fr": "Désarmée",
+                "de": "Unscharf",
+                "es": "Desarmada"
+              }
+            },
+            {
+              "value": "perimeter",
+              "label": {
+                "en": "Perimeter protection",
+                "fr": "Protection périphérique",
+                "de": "Hüllschutz",
+                "es": "Protección perimetral"
+              }
+            },
+            {
+              "value": "full",
+              "label": {
+                "en": "Full protection",
+                "fr": "Protection totale",
+                "de": "Vollschutz",
+                "es": "Protección total"
+              }
+            }
+          ]
         }
       ],
       "outputs": [
         {
-          "key": "signalled",
+          "key": "applied",
           "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
+          "label": {
+            "en": "Mode applied",
+            "fr": "Mode appliqué",
+            "de": "Modus übernommen",
+            "es": "Modo aplicado"
+          }
+        },
+        {
+          "key": "blocking_sensors",
+          "type": "string",
+          "label": {
+            "en": "Sensors that blocked it",
+            "fr": "Détecteurs qui l'ont bloqué",
+            "de": "Melder, die es verhindert haben",
+            "es": "Detectores que lo bloquearon"
+          }
         }
       ]
     }
   ],
   "widgets": [
     {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
+      "key": "heating",
+      "label": {
+        "en": "Homematic IP heating",
+        "fr": "Chauffage Homematic IP",
+        "de": "Homematic IP Heizung",
+        "es": "Calefacción Homematic IP"
       },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+      "description": {
+        "en": "Every room at a glance, the outside temperature, eco mode in one tap.",
+        "fr": "Toutes les pièces d'un coup d'œil, la température extérieure, le mode éco en un geste.",
+        "de": "Alle Räume auf einen Blick, die Außentemperatur, der Eco-Modus mit einem Tipp.",
+        "es": "Todas las habitaciones de un vistazo, la temperatura exterior, el modo eco en un toque."
+      },
+      "icon": "thermometer",
+      "settings": [
+        {
+          "key": "rooms",
+          "type": "multi_select",
+          "source": "devices",
+          "label": {
+            "en": "Rooms (all when empty)",
+            "fr": "Pièces (toutes si vide)",
+            "de": "Räume (alle, wenn leer)",
+            "es": "Habitaciones (todas si está vacío)"
+          }
+        }
+      ],
+      "action_timeout_seconds": 30
     }
   ]
 }

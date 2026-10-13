@@ -1,169 +1,236 @@
 // -----------------------------------------------------------------------------
-// Dashboard widgets (SDK v0.14+, Gladys 5.1+).
+// Dashboard widget (manifest `widgets`, Gladys 5.1+): `heating`.
 //
-// A widget puts the integration's own data on the Gladys dashboard without a
-// dedicated core widget. The manifest `widgets` field declares its identity
-// (key, label, icon, optional per-instance `settings`); at runtime the
-// integration returns a DECLARATIVE content — `text`, `value`, `gauge`,
-// `status`, `chart`, `card-list`, `image`, `button` — that the core renders
-// with its own theme, dark mode and translations. No HTML, no CSS.
+// The Gladys device boxes show one room at a time. What the widget adds: the
+// whole house at a glance — every heating room with its temperature, its set
+// point and what it is doing (heating, boost, window open, eco) — the outside
+// temperature the cloud knows for the home, and the eco mode (absence) of
+// the whole home, one tap to start or end it.
 //
-// Each entry of WIDGETS is keyed by the widget `key` and exposes:
-//   - get(gladys, { settings, language, units, config }): the content,
-//     registered by index.js with `gladys.onWidgetGet(key, ...)`;
-//   - action(gladys, { actionKey, params, settings, config }) (optional): a
-//     tapped `button` carrying an `action`, registered with
-//     `gladys.onWidgetAction`.
-//
-// Check your contents in the tests with `validateWidgetContent` (exported by
-// the SDK, see test/widgets.test.js), or run with DEBUG=gladys-integration-sdk
-// to have the SDK log every violation of the vocabulary and the budget.
+// Budget (8 components, 2 texts, 1 status, 4 buttons): one caption, two
+// tiles, one status list of 10 rooms at most, one button.
 // -----------------------------------------------------------------------------
 
-import {
-  createLogger,
-  DEVICE_FEATURE_CATEGORIES,
-  DEVICE_TRANSPORTS,
-  WIDGET_COLORS,
-} from '@gladysassistant/integration-sdk';
-import { identifyDevice } from './devices/index.js';
-import { weatherStation } from './devices/weatherStation.js';
-import { plug } from './devices/plug.js';
-import { light } from './devices/light.js';
+import { WIDGET_COLORS } from '@gladysassistant/integration-sdk';
+import { WIDGET_KEY } from './hub.js';
+import { heatingGroups, indoorClimate, isAbsent } from './hmip/model.js';
 
-const logger = createLogger({ name: 'widgets' });
+const MAX_ROOMS = 10;
 
-// Widget key, as declared in the manifest `widgets` field.
-export const DEMO_STATUS_WIDGET = 'demo_status';
-
-// Keys of the `button` actions the demo_status content declares.
-const DEMO_STATUS_ACTIONS = { IDENTIFY_LIGHT: 'identify_light' };
-
-// How the plug transport reads in the status list.
-const TRANSPORT_STATUS = {
-  [DEVICE_TRANSPORTS.LOCAL]: { value: { en: 'Local', fr: 'Locale' }, color: WIDGET_COLORS.SUCCESS },
-  [DEVICE_TRANSPORTS.CLOUD]: { value: { en: 'Cloud', fr: 'Cloud' }, color: WIDGET_COLORS.INFO },
-  [DEVICE_TRANSPORTS.UNREACHABLE]: {
-    value: { en: 'Unreachable', fr: 'Injoignable' },
-    color: WIDGET_COLORS.DANGER,
+export const TEXT = {
+  notPaired: {
+    en: 'Pair the access point in the configuration of the integration first.',
+    fr: "Appairez d'abord le point d'accès dans la configuration de l'intégration.",
+    de: 'Kopple zuerst den Access Point in der Konfiguration der Integration.',
+    es: 'Empareje primero el punto de acceso en la configuración de la integración.',
+  },
+  noRooms: {
+    en: 'No heating room in the Homematic IP home.',
+    fr: 'Aucune pièce chauffée dans la maison Homematic IP.',
+    de: 'Kein Heizungsraum im Homematic IP Zuhause.',
+    es: 'Ninguna habitación con calefacción en la casa Homematic IP.',
+  },
+  outside: { en: 'Outside', fr: 'Extérieur', de: 'Außen', es: 'Exterior' },
+  heatingRooms: { en: 'Heating', fr: 'En chauffe', de: 'Heizt', es: 'Calentando' },
+  startEco: { en: 'Eco mode', fr: 'Mode éco', de: 'Eco-Modus', es: 'Modo eco' },
+  endEco: {
+    en: 'End eco mode',
+    fr: 'Fin du mode éco',
+    de: 'Eco-Modus beenden',
+    es: 'Fin del modo eco',
+  },
+  ecoOn: {
+    en: 'Eco mode: the whole home is in absence.',
+    fr: 'Mode éco : toute la maison est en absence.',
+    de: 'Eco-Modus: Das ganze Zuhause ist auf Abwesenheit.',
+    es: 'Modo eco: toda la casa está en ausencia.',
+  },
+  ecoUntil: {
+    en: (end) => `Eco mode until ${end}.`,
+    fr: (end) => `Mode éco jusqu'au ${end}.`,
+    de: (end) => `Eco-Modus bis ${end}.`,
+    es: (end) => `Modo eco hasta el ${end}.`,
+  },
+  vacationUntil: {
+    en: (end) => `Vacation mode until ${end}.`,
+    fr: (end) => `Mode vacances jusqu'au ${end}.`,
+    de: (end) => `Urlaubsmodus bis ${end}.`,
+    es: (end) => `Modo vacaciones hasta el ${end}.`,
+  },
+  windowOpen: { en: 'window', fr: 'fenêtre', de: 'Fenster', es: 'ventana' },
+  boost: { en: 'boost', fr: 'boost', de: 'Boost', es: 'boost' },
+  eco: { en: 'eco', fr: 'éco', de: 'Eco', es: 'eco' },
+  ecoStarted: {
+    en: 'Eco mode started',
+    fr: 'Mode éco lancé',
+    de: 'Eco-Modus gestartet',
+    es: 'Modo eco iniciado',
+  },
+  ecoEnded: {
+    en: 'Eco mode ended',
+    fr: 'Mode éco terminé',
+    de: 'Eco-Modus beendet',
+    es: 'Modo eco terminado',
   },
 };
 
-// A live tile references a feature by its external_id: read it from the
-// discovery payload itself, so the widget and the device never disagree.
-function featureExternalId(gladys, config, blueprint, category) {
-  const device = blueprint.buildDevice(gladys, config);
-  return device.features.find((feature) => feature.category === category).external_id;
+const pick = (text, language) => text[language] ?? text.en;
+
+function temperature(value, language) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return '–';
+  }
+  const formatted = new Intl.NumberFormat(language, { maximumFractionDigits: 1 }).format(value);
+  return `${formatted} °C`;
 }
 
-function plugConnectionStatus(gladys, config) {
-  const { transport, degraded } = plug.transport(gladys, config);
-  const { value, color } = TRANSPORT_STATUS[transport];
-  if (degraded) {
+/** "2026_10_20 18:00" (wall time of the home) as the user reads a date. */
+export function readableEndTime(raw, language) {
+  const match =
+    typeof raw === 'string' ? raw.match(/^(\d{4})_(\d{2})_(\d{2}) (\d{2}):(\d{2})/) : null;
+  if (!match) {
+    return null;
+  }
+  const [year, month, day, hour, minute] = match.slice(1).map(Number);
+  // Formatted in UTC from UTC parts: the wall time stays what the cloud said.
+  // English as in Europe, where Homematic IP is sold: 24-hour clock.
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : language, {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(Date.UTC(year, month - 1, day, hour, minute)));
+}
+
+/** One status row: the room, its temperatures and what it is doing. */
+function roomRow(group, language) {
+  const flags = [];
+  let color = WIDGET_COLORS.SUCCESS;
+  if (group.controlMode === 'ECO') {
+    flags.push(pick(TEXT.eco, language));
+    color = WIDGET_COLORS.NEUTRAL;
+  }
+  if (typeof group.valvePosition === 'number' && group.valvePosition > 0) {
+    color = WIDGET_COLORS.WARNING;
+  }
+  if (group.boostMode === true) {
+    flags.push(pick(TEXT.boost, language));
+    color = WIDGET_COLORS.DANGER;
+  }
+  if (typeof group.windowState === 'string' && group.windowState !== 'CLOSED') {
+    flags.push(pick(TEXT.windowOpen, language));
+    color = WIDGET_COLORS.INFO;
+  }
+  const measured = group.actualTemperature ?? group.valveActualTemperature;
+  const value = `${temperature(measured, language)} → ${temperature(group.setPointTemperature, language)}`;
+  return {
+    label: String(group.label ?? '').slice(0, 40) || '?',
+    value: (flags.length > 0 ? `${value} · ${flags.join(', ')}` : value).slice(0, 40),
+    color,
+  };
+}
+
+/** The content of the widget, from the hub's snapshot. */
+export function heatingContent(hub, { settings = {}, language = 'en' } = {}) {
+  const snapshot = hub.snapshot;
+  if (!snapshot) {
     return {
-      value: { en: `${value.en} (degraded mode)`, fr: `${value.fr} (mode dégradé)` },
-      color: WIDGET_COLORS.WARNING,
+      ttl_seconds: 60,
+      components: [{ type: 'text', variant: 'body', text: pick(TEXT.notPaired, language) }],
     };
   }
-  return { value, color };
+  let groups = heatingGroups(snapshot);
+  // The rooms chosen in the settings (room devices added to Gladys), if any.
+  const chosen = Array.isArray(settings.rooms) ? settings.rooms : [];
+  const chosenIds = new Set(
+    chosen
+      .map((externalId) => hub.devicesByExternalId.get(externalId))
+      .filter((description) => description?.kind === 'room')
+      .map((description) => description.sourceId),
+  );
+  if (chosenIds.size > 0) {
+    groups = groups.filter((group) => chosenIds.has(group.id));
+  }
+  const components = [];
+  const climate = indoorClimate(snapshot);
+  const absent = isAbsent(snapshot);
+  if (absent) {
+    const end = readableEndTime(climate?.absenceEndTime, language);
+    const text =
+      climate?.absenceType === 'VACATION' && end
+        ? pick(TEXT.vacationUntil, language)(end)
+        : end
+          ? pick(TEXT.ecoUntil, language)(end)
+          : pick(TEXT.ecoOn, language);
+    components.push({ type: 'text', variant: 'caption', text });
+  }
+  const outside = snapshot.home?.weather?.temperature;
+  if (typeof outside === 'number' && Number.isFinite(outside)) {
+    components.push({
+      type: 'value',
+      value: Math.round(outside * 10) / 10,
+      unit: '°C',
+      label: pick(TEXT.outside, language),
+      icon: 'cloud',
+    });
+  }
+  if (groups.length > 0) {
+    const heating = groups.filter(
+      (group) => typeof group.valvePosition === 'number' && group.valvePosition > 0,
+    ).length;
+    components.push({
+      type: 'value',
+      value: `${heating}/${groups.length}`,
+      label: pick(TEXT.heatingRooms, language),
+      icon: 'thermometer',
+      color: heating > 0 ? WIDGET_COLORS.WARNING : WIDGET_COLORS.NEUTRAL,
+    });
+    components.push({
+      type: 'status',
+      items: groups.slice(0, MAX_ROOMS).map((group) => roomRow(group, language)),
+    });
+  } else {
+    components.push({ type: 'text', variant: 'body', text: pick(TEXT.noRooms, language) });
+  }
+  if (climate?.active) {
+    components.push(
+      absent
+        ? {
+            type: 'button',
+            label: pick(TEXT.endEco, language),
+            icon: 'home',
+            style: 'secondary',
+            action: { key: 'end_absence' },
+          }
+        : {
+            type: 'button',
+            label: pick(TEXT.startEco, language),
+            icon: 'moon',
+            style: 'secondary',
+            action: { key: 'start_absence', confirm: true },
+          },
+    );
+  }
+  return { ttl_seconds: 120, components };
 }
 
 export const WIDGETS = {
-  [DEMO_STATUS_WIDGET]: {
-    // `settings` holds the per-instance values of the declared `settings`
-    // (none here); `language` and `units` are those of the user viewing the
-    // dashboard, for the values you format yourself. Multi-language objects
-    // (`{ en, fr }`) are picked by the core, like everywhere else.
-    async get(gladys, { config }) {
-      logger.debug(`onWidgetGet <- ${DEMO_STATUS_WIDGET}`);
-      return {
-        // Reload policy: the computed parts below only change with the
-        // config, and index.js nudges the widget on every (re)connection and
-        // config update (see refreshWidgets) — the TTL is just a safety net.
-        ttl_seconds: 300,
-        components: [
-          // Device-bound tiles: LIVE, they follow the published states over
-          // the core's real-time path. No TTL, no nudge involved.
-          {
-            type: 'value',
-            label: { en: 'Temperature', fr: 'Température' },
-            icon: 'thermometer',
-            device_feature: featureExternalId(
-              gladys,
-              config,
-              weatherStation,
-              DEVICE_FEATURE_CATEGORIES.TEMPERATURE_SENSOR,
-            ),
-          },
-          {
-            type: 'value',
-            label: { en: 'Office plug', fr: 'Prise du bureau' },
-            icon: 'zap',
-            device_feature: featureExternalId(
-              gladys,
-              config,
-              plug,
-              DEVICE_FEATURE_CATEGORIES.ENERGY_SENSOR,
-            ),
-          },
-          // Computed rows: what the integration knows that no device feature
-          // carries. Served from the core cache until the TTL or a nudge.
-          {
-            type: 'status',
-            items: [
-              {
-                label: { en: 'Plug connection', fr: 'Connexion de la prise' },
-                icon: 'wifi',
-                ...plugConnectionStatus(gladys, config),
-              },
-              {
-                label: { en: 'Observed location', fr: 'Position observée' },
-                icon: 'map-pin',
-                value: `${config.latitude.toFixed(2)}, ${config.longitude.toFixed(2)}`,
-                color: WIDGET_COLORS.NEUTRAL,
-              },
-            ],
-          },
-          // `params` are declared HERE and sent back as-is: the handler never
-          // receives user input (a dashboard can hang on a public wall).
-          {
-            type: 'button',
-            label: { en: 'Identify the light', fr: 'Identifier la lampe' },
-            icon: 'eye',
-            style: 'secondary',
-            action: {
-              key: DEMO_STATUS_ACTIONS.IDENTIFY_LIGHT,
-              params: { device: light.deviceExternalId(gladys) },
-            },
-          },
-        ],
-      };
+  [WIDGET_KEY]: {
+    async get(hub, request) {
+      return heatingContent(hub, request);
     },
 
-    // Resolve an optional toast (string or multi-language object, ≤ 200
-    // characters). After a successful action the core drops the cached
-    // content and every open dashboard refetches it: no nudge needed.
-    async action(gladys, { actionKey, params, config }) {
-      logger.info(`onWidgetAction <- ${DEMO_STATUS_WIDGET}.${actionKey}`);
-      if (actionKey === DEMO_STATUS_ACTIONS.IDENTIFY_LIGHT) {
-        return identifyDevice(gladys, params.device, config);
+    async action(hub, { actionKey }) {
+      if (actionKey === 'start_absence') {
+        await hub.startAbsence(0);
+        return TEXT.ecoStarted;
       }
-      // Throwing acks the action as failed: the message reaches the user.
-      throw new Error(`Unknown widget action: ${actionKey}`);
+      if (actionKey === 'end_absence') {
+        await hub.endAbsence();
+        return TEXT.ecoEnded;
+      }
+      throw new Error(`Unknown widget action "${actionKey}"`);
     },
   },
 };
-
-/**
- * Freshness nudge: ask the core to re-pull every widget NOW instead of
- * waiting for the content TTL. Call it when you KNOW a computed content
- * changed (here: the config, which drives the plug transport and the observed
- * location) — and after every (re)connection, since the nudges are
- * fire-and-forget: rate-limited core-side to 1 per 10 s per widget, dropped
- * silently while disconnected.
- */
-export function refreshWidgets(gladys) {
-  for (const key of Object.keys(WIDGETS)) {
-    gladys.requestWidgetRefresh(key);
-  }
-}
