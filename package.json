@@ -1,6 +1,6 @@
 {
   "name": "gladys-homematicip",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Gladys Assistant integration for Homematic IP (eQ-3), through the Homematic IP cloud.",
   "type": "module",

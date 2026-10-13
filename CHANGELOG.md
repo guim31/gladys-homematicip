@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-13
+
 ### Added
 
 - Homematic IP (eQ-3) devices in Gladys through the Homematic IP cloud of the
@@ -35,4 +37,5 @@ the notes of the version's GitHub Release.
 - Feature names, messages, widget and documentation in English, French,
   German and Spanish.
 
-[Unreleased]: https://github.com/guim31/gladys-homematicip/commits/main
+[Unreleased]: https://github.com/guim31/gladys-homematicip/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/guim31/gladys-homematicip/releases/tag/v1.0.1
