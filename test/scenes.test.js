@@ -1,93 +1,89 @@
+// -----------------------------------------------------------------------------
+// Scene actions: eco mode, vacation, end, and the alarm within its policy.
+// -----------------------------------------------------------------------------
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { createFakeGladys } from '@gladysassistant/integration-sdk/testing';
-import { DEVICE_BLUEPRINTS } from '../src/devices/index.js';
-import { MOTION_DETECTED_TRIGGER, motionSensor } from '../src/devices/motionSensor.js';
-import { SCENE_ACTIONS } from '../src/scenes.js';
-import { normalizeConfig } from '../src/config.js';
+import { ACCESS_POINT, FakeCloud, IDS, createWorld, settle } from './helpers/world.js';
 
-const manifest = JSON.parse(
-  await readFile(new URL('../gladys-assistant-integration.json', import.meta.url), 'utf8'),
-);
-const config = normalizeConfig();
+async function world(t, options) {
+  const created = await createWorld(options);
+  t.after(() => created.app.stop());
+  return created;
+}
 
-const declarationOf = (list, key) => manifest[list].find((entry) => entry.key === key);
-const keysOf = (list) => (list ?? []).map((entry) => entry.key);
-const deviceIdOf = (gladys, key) =>
-  DEVICE_BLUEPRINTS.find((bp) => bp.key === key).deviceExternalId(gladys);
-
-// Let the async interval callback run to completion.
-const flush = () => new Promise((resolve) => setImmediate(resolve));
-
-test('the motion sensor fires one motion_detected event per detection, none on the clear', async (t) => {
-  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
-  const gladys = createFakeGladys();
-  const stopPush = motionSensor.startPush(gladys, config);
-  try {
-    t.mock.timers.tick(60_000);
-    await flush();
-    assert.equal(gladys.fake.sceneEvents.length, 1, 'one detection, one event');
-    assert.equal(gladys.fake.sceneEvents[0].key, MOTION_DETECTED_TRIGGER);
-    assert.equal(gladys.fake.states.at(-1).state, 1, 'the state is still published');
-
-    t.mock.timers.tick(10_000);
-    await flush();
-    assert.equal(gladys.fake.states.at(-1).state, 0, 'the detection is cleared');
-    assert.equal(gladys.fake.sceneEvents.length, 1, 'the clear fires no event');
-  } finally {
-    stopPush();
-  }
-});
-
-test('motion_detected data only carries keys the trigger declares', async (t) => {
-  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
-  const gladys = createFakeGladys();
-  const stopPush = motionSensor.startPush(gladys, config);
-  try {
-    t.mock.timers.tick(60_000);
-    await flush();
-  } finally {
-    stopPush();
-  }
-  const [{ data }] = gladys.fake.sceneEvents;
-  const trigger = declarationOf('scene_triggers', MOTION_DETECTED_TRIGGER);
-  // The core keeps the `fields` keys (filters) and the `variables` keys
-  // (exposed to the scene): any other key would be silently dropped.
-  const declared = [...keysOf(trigger.fields), ...keysOf(trigger.variables)];
-  for (const [key, value] of Object.entries(data)) {
-    assert.ok(declared.includes(key), `data.${key} is not declared, the core would drop it`);
-    assert.ok(value === null || typeof value !== 'object', `data.${key} must be a primitive`);
-  }
-  // A `"source": "devices"` filter stores a device external_id.
-  assert.equal(data.device, deviceIdOf(gladys, 'motion-sensor'));
-  const targets = trigger.fields.find((field) => field.key === 'target').options;
-  assert.ok(
-    targets.some((option) => option.value === data.target),
-    `data.target "${data.target}" must be one of the filter options`,
-  );
-});
-
-test('identify_device signals the chosen device and returns the declared outputs', async () => {
-  const gladys = createFakeGladys();
-  const outputs = await SCENE_ACTIONS.identify_device(gladys, {
-    fields: { device: deviceIdOf(gladys, 'light') },
-    config,
+test('start_absence: for a number of hours, or until ended', async (t) => {
+  const w = await world(t);
+  assert.deepEqual(await w.fake.sceneAction('start_absence', { duration: 3 }), { success: true });
+  assert.deepEqual(w.cloud.callsTo('home/heating/activateAbsenceWithDuration')[0].body, {
+    duration: 180,
   });
-  assert.deepEqual(outputs, { signalled: true });
-  const declared = keysOf(declarationOf('scene_actions', 'identify_device').outputs);
-  for (const key of Object.keys(outputs)) {
-    assert.ok(declared.includes(key), `output "${key}" is not declared, the core would drop it`);
-  }
+  assert.equal((await w.fake.sceneAction('start_absence', { duration: 0 })).success, true);
+  assert.equal(w.cloud.callsTo('home/heating/activateAbsencePermanent').length, 1);
+  assert.equal(w.cloud.callsTo('home/heating/activateAbsencePermanent')[0].body, undefined);
 });
 
-test('identify_device reports a device that cannot signal itself through its output', async () => {
-  // Not a failure: a scene action is never a condition, the scene author
-  // gates the following actions on the output instead.
-  const gladys = createFakeGladys();
-  const outputs = await SCENE_ACTIONS.identify_device(gladys, {
-    fields: { device: deviceIdOf(gladys, 'weather-station') },
-    config,
+test('start_vacation: an end date in the time zone of the home, a half-degree temperature', async (t) => {
+  const now = Date.UTC(2026, 9, 13, 18, 0);
+  const w = await world(t, { now: () => now });
+  const ack = await w.fake.sceneAction('start_vacation', { days: 7, temperature: 16.2 });
+  assert.equal(ack.success, true, ack.error);
+  // The recorded home is in Europe/Vienna: UTC+2 in October.
+  assert.deepEqual(w.cloud.callsTo('home/heating/activateVacation')[0].body, {
+    endTime: '2026_10_20 20:00',
+    temperature: 16,
   });
-  assert.deepEqual(outputs, { signalled: false });
+  await settle(w);
+  assert.equal(w.hub.snapshot.home.functionalHomes.INDOOR_CLIMATE.absenceType, 'VACATION');
+  assert.equal((await w.fake.sceneAction('end_absence', {})).success, true);
+  assert.equal(w.cloud.callsTo('home/heating/deactivateVacation').length, 1);
+});
+
+test('end_absence ends an absence with its own call', async (t) => {
+  const w = await world(t);
+  await w.fake.sceneAction('start_absence', {});
+  await settle(w);
+  await w.fake.sceneAction('end_absence', {});
+  assert.equal(w.cloud.callsTo('home/heating/deactivateAbsence').length, 1);
+});
+
+test('set_alarm_mode: refused by default, then applied, with the sensors that block it', async (t) => {
+  const w = await world(t);
+  const refused = await w.fake.sceneAction('set_alarm_mode', { mode: 'full' });
+  assert.equal(refused.success, false);
+  assert.match(refused.error, /disabled in the configuration/);
+
+  await w.fake.configUpdated({ access_point: ACCESS_POINT, language: 'en', alarm_control: 'arm' });
+  assert.deepEqual(await w.fake.sceneAction('set_alarm_mode', { mode: 'perimeter' }), {
+    success: true,
+    data: { outputs: { applied: true, blocking_sensors: '' } },
+  });
+  w.cloud.blockingSensors = [IDS.contact];
+  assert.deepEqual(await w.fake.sceneAction('set_alarm_mode', { mode: 'full' }), {
+    success: true,
+    data: { outputs: { applied: false, blocking_sensors: 'Fenster' } },
+  });
+  const disarm = await w.fake.sceneAction('set_alarm_mode', { mode: 'disarmed' });
+  assert.equal(disarm.success, false);
+});
+
+test('a home without heating or alarm says so', async (t) => {
+  const cloud = new FakeCloud();
+  cloud.state.home.functionalHomes.INDOOR_CLIMATE.active = false;
+  cloud.state.home.functionalHomes.SECURITY_AND_ALARM.active = false;
+  const w = await world(t, {
+    cloud,
+    config: { access_point: ACCESS_POINT, language: 'en', alarm_control: 'arm_disarm' },
+  });
+  assert.match((await w.fake.sceneAction('start_absence', {})).error, /no heating/);
+  assert.match((await w.fake.sceneAction('set_alarm_mode', { mode: 'full' })).error, /no alarm/);
+  const home = w.fake.discoveredDevices.find((device) => device.model === 'HOME');
+  assert.equal(home, undefined, 'no home device without heating nor alarm');
+});
+
+test('not paired: the scene actions fail with the reason', async (t) => {
+  const w = await world(t, { paired: false });
+  const ack = await w.fake.sceneAction('end_absence', {});
+  assert.equal(ack.success, false);
+  assert.match(ack.error, /not paired/);
 });

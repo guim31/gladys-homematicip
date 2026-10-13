@@ -16,8 +16,8 @@ its only runtime dependency. It started from the official JavaScript template.
 ```bash
 npm install
 npm test                                  # node --test, the built-in runner
-node --test test/devices.test.js          # one file
-node --test --test-name-pattern "plug"    # tests whose name matches
+node --test test/hub.test.js              # one file
+node --test --test-name-pattern "alarm"   # tests whose name matches
 npm run lint                              # ESLint
 npm run format:check                      # Prettier, as the CI runs it
 npm run format                            # Prettier, fix in place
@@ -31,15 +31,24 @@ pushing.
 ## Architecture
 
 ```
-index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
+index.js                          SDK wiring only: registerHandlers + connect()
+src/app.js                        every SDK handler registered on the hub (tests use the same wiring)
+src/hub.js                        lifecycle, pairing, full reads, event stream, publishing, commands, alarm trigger
+src/devices.js                    Homematic IP home → Gladys devices (channels, rooms, home), NAMES (4 languages)
+src/hmip/cloud.js                 cloud REST client: lookup, headers, pairing calls, full read, call bucket
+src/hmip/events.js                cloud WebSocket event stream (built-in WebSocket, headers, backoff, stale)
+src/hmip/model.js                 the home snapshot, stream messages, heating and alarm helpers (pure)
 src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
+src/widgets.js                    heating widget (manifest `widgets`)
+src/texts.js                      connection statuses, action reports, errors (4 languages)
+src/store.js                      /data/homematicip.json: the pairing token (0600)
+src/problems.js                   repeated failures logged once, and their end once
 src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
+scripts/probe.mjs                 read-only probe of the real cloud, run from a machine with network
 gladys-assistant-integration.json manifest: name, config_schema, actions, image...
-docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
+docs/{en,fr,de,es}.md             user documentation, re-hosted by Gladys (en and fr mandatory)
+test/helpers/fakeCloud.js         simulated cloud (REST + WebSocket); test/helpers/world.js wires it all
+test/fixtures/hmip/               recorded home (Home Assistant tests, Apache-2.0, anonymized subset)
 test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
 .github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
 ```
@@ -70,8 +79,10 @@ test/                             node --test, against the SDK's fake Gladys (in
   `type: "provider"`: 5.1.0). `test/manifest.test.js` ties the manifest to the
   code (defaults, action, scene and widget handlers): change both sides
   together.
-- **User-facing text** is bilingual (English and French): action messages,
-  manifest texts, and `docs/en.md` / `docs/fr.md`, kept in sync.
+- **User-facing text** exists in four languages (English, French, German,
+  Spanish): action messages, manifest texts, feature names, widget, and
+  `docs/en.md`, `docs/fr.md`, `docs/de.md`, `docs/es.md`, kept in sync
+  (`test/i18n.test.js`).
 - **Style.** Prettier formats, ESLint catches mistakes. Comments explain why,
   in English. Tests never touch the network.
 
@@ -233,3 +244,47 @@ long, et sur un « Sie »/« Ihr… » de politesse en allemand. Le store exige 
 - Docs `en`, `fr`, `de`, `es` avec les mêmes sections.
 - Chauffe, ouverture, sécurité : ne rien rendre pilotable « comme un thermostat » ou par un assistant
   vocal quand une erreur serait dangereuse (leçon d'OctoPrint).
+
+## Homematic IP (cette intégration)
+
+**Protocole du cloud** (lu dans `hahn-th/homematicip-rest-api`, GPL-3.0 : rien n'est copié ; vérifié contre les
+réponses enregistrées des tests de Home Assistant, Apache-2.0).
+
+- Tout est `POST` JSON. L'hôte vient de `https://lookup.homematic.com:48335/getHost` (corps : les
+  `clientCharacteristics` et l'`id` = SGTIN) : `urlREST` et `urlWebSocket`. Les appels vont à `<urlREST>/hmip/<chemin>`.
+- En-têtes : `VERSION: 12`, `ACCESSPOINT-ID` (SGTIN, 24 hexadécimaux), `CLIENTAUTH` = SHA-512 majuscule de
+  `SGTIN + "jiLpVitHvWnIGD1yo7MA"` (constante du protocole, la même pour tous les clients), puis `AUTHTOKEN` une fois
+  appairé. Le WebSocket prend les mêmes en-têtes : le `WebSocket` intégré de Node 22+ (undici) les accepte en second
+  argument `{ headers }`, pas besoin de `ws`.
+- Appairage : `auth/connectionRequest` (en-tête `PIN` si défini), appui sur le bouton bleu,
+  `auth/isRequestAcknowledged` (200 seulement après l'appui), `auth/requestAuthToken`, `auth/confirmAuthToken`.
+- Lecture complète : `home/getCurrentState` (plusieurs Mo pour une grande maison). Le flux pousse la version complète
+  de ce qui change (`DEVICE_CHANGED`, `GROUP_CHANGED`, `HOME_CHANGED`) et les appuis (`DEVICE_CHANNEL_EVENT`).
+- Le cloud freine (HTTP 429) sans publier de quota : seau de 10 appels, puis un toutes les 8 s, comme le client de
+  référence. Une commande n'attend pas plus de 4 s un jeton (le cœur n'attend l'ack que 5 s).
+- **Injoignable depuis une session de code** : `lookup.homematic.com:48335` est refusé par le proxy (et le `fetch` de
+  Node ignore `HTTPS_PROXY`). Le vrai test passe par `scripts/probe.mjs` (`pair`, puis `read`), lancé ailleurs.
+
+**Pièges relevés**
+
+- Les fonctionnalités se lisent par **type de canal** (`functionalChannelType`), pas par modèle : un contact est un
+  contact sur un HmIP-SWDO comme sur un module d'entrées filaire.
+- `MULTI_MODE_INPUT_CHANNEL` porte un `windowState` même en mode bouton : décider par `multiModeInputMode`
+  (`BINARY_BEHAVIOR` = contact, `KEY_BEHAVIOR` = bouton).
+- Niveau des volets inversé : `shutterLevel` / `primaryShadingLevel` 0 = ouvert, 1 = fermé ; Gladys 100 = ouvert.
+- `TILTED` (fenêtre entrouverte, poignée) compte comme ouvert : 0 pour `opening-sensor`.
+- `KEY_PRESS_LONG` se répète tant que la touche est tenue : ne publier que `KEY_PRESS_SHORT`, `..._LONG_START`,
+  `..._LONG_STOP` (comme Home Assistant). Deux appuis courts donnent deux fois la même valeur : `publishStates`, jamais
+  `publishChangedStates`, pour les boutons.
+- En absence ou en vacances, le `controlMode` des pièces passe à `ECO` ; `absenceType` du `INDOOR_CLIMATE` dit lequel
+  (`deactivateVacation` et `deactivateAbsence` sont deux appels).
+- Les ids d'appareil des fixtures ne sont pas tous hexadécimaux (`3014F71100BLIND_MODULE00`) : ne valider que le SGTIN
+  saisi, jamais les ids reçus.
+- Une grande maison dépasse 300 états à la première lecture : on ne publie que pour les appareils ajoutés à Gladys, par
+  paquets de 250 espacés d'une minute.
+- `supported_options` : valeurs chaînes seulement sur `text/select`, entiers ailleurs.
+- L'alarme ne se pilote que selon `alarm_control` (lecture seule par défaut, armer seulement, armer et désarmer) ; son
+  sélecteur reste `read_only: false` (figé à la création) et le refus passe par l'erreur de la commande.
+- Tests : le faux Gladys rend le message d'une action dans `ack.data.message` ; `AbortSignal.timeout` ne garde pas le
+  processus en vie (un test de délai doit tenir un minuteur à lui) ; le garde-fou « Sie » de `test/i18n.test.js`
+  attrape aussi « Sie » pronom en début de phrase : reformuler.

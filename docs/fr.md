@@ -1,67 +1,251 @@
-# Template de démonstration
+# Homematic IP
 
-Ceci est la documentation utilisateur de l'intégration. Gladys ré-héberge ce
-fichier et affiche un lien **Documentation** permanent vers lui dans l'écran
-de configuration (dans la langue de l'utilisateur, avec l'anglais en repli) —
-c'est au moment de configurer que l'utilisateur en a le plus besoin. Gardez
-les courtes indications d'accueil dans les blocs `section` du `config_schema`
-du manifest ; mettez ici le pas-à-pas détaillé (captures d'écran, dépannage…).
+Amène vos appareils **Homematic IP** (eQ-3) dans Gladys par le **cloud
+Homematic IP**, comme l'application officielle : thermostats de radiateur et
+muraux, pièces chauffées, contacts de fenêtre et de porte, détecteurs de
+mouvement, de présence, de fumée et d'eau, prises et actionneurs avec leur
+puissance, variateurs, volets et stores, interrupteurs muraux et
+télécommandes, capteurs météo, et le système d'alarme.
 
-## Ce que vous obtenez
+> **Developed without the hardware: feedback welcome.** Cette intégration a
+> été construite d'après le protocole public et des réponses enregistrées du
+> cloud Homematic IP, sans point d'accès sous la main. Si quelque chose est
+> faux ou manque, ouvrez une issue :
+> [github.com/guim31/gladys-homematicip/issues](https://github.com/guim31/gladys-homematicip/issues).
+> Sans lien avec eQ-3 AG : Homematic IP est une marque d'eQ-3.
 
-Six appareils de démonstration apparaissent après l'installation : une
-station météo (vraies données Open-Meteo), un interrupteur, une lampe
-variable, une prise connectée avec mesure de puissance, un détecteur de
-mouvement et une caméra.
+## Prérequis
+
+- Un **point d'accès** Homematic IP (HmIP-HAP, ou le point d'accès filaire
+  HmIP-DRAP) installé dans l'application Homematic IP, avec ses appareils déjà
+  appairés.
+- Son **SGTIN** : le code de 24 caractères imprimé sous le point d'accès et
+  sur l'autocollant fourni (par exemple `3014-F711-A000-0000-0000-0000`).
+- Un accès Internet pour Gladys : tout passe par le cloud Homematic IP.
+- Gladys 5.1 ou plus récent.
+
+La Home Control Unit (HCU) et sa « Connect API » locale ne sont pas prises en
+charge : cette intégration parle au cloud du point d'accès.
 
 ## Configuration
 
-1. Ouvrez l'onglet **Configuration** de l'intégration.
-2. Renseignez la **latitude** et la **longitude** que la station météo de
-   démonstration doit observer (Paris par défaut), et choisissez votre unité
-   de température. L'**intervalle de rafraîchissement** règle la fréquence
-   de lecture de la station météo et de la puissance de la prise : toutes
-   les 5 minutes par défaut, toutes les minutes au plus.
-3. Enregistrez : les appareils apparaissent dans l'onglet **Découverte**,
-   prêts à être ajoutés.
+Ouvrez l'onglet **Configuration** de l'intégration.
 
-Le réglage **Préférer la connexion locale** pilote la prise de
-démonstration : elle affiche en badge le canal réellement utilisé (local ou
-cloud), avec un point orange quand elle fonctionne en mode dégradé (local
-refusé, bascule cloud).
+1. **SGTIN du point d'accès** : saisissez le code imprimé sous le point
+   d'accès (tirets et espaces acceptés), puis enregistrez.
+2. **Code PIN du point d'accès** : seulement si vous avez protégé votre point
+   d'accès par un code PIN dans l'application. Il ne sert qu'à l'appairage.
+3. **Langue des noms des appareils** : la langue des noms des fonctionnalités
+   des appareils que vous ajoutez (Température, Consigne, Ouverture…).
+   Français par défaut.
+4. **Pilotage de l'alarme** : ce que Gladys peut faire avec le système
+   d'alarme (voir plus bas).
 
-## Actions
+### Appairage
 
-- **Tester le fournisseur météo** — effectue une requête en direct vers
-  Open-Meteo et affiche la température et l'humidité actuelles sous le
-  bouton.
-- **Identifier un appareil** — choisissez un de vos appareils dans la liste
-  et il se signale (la lampe de démonstration « clignote » dans les logs).
+1. Cliquez sur **Démarrer l'appairage**. Gladys demande l'accès au cloud,
+   comme un nouveau client nommé « Gladys ».
+2. Appuyez sur le **bouton bleu** sur le dessus du point d'accès.
+3. Cliquez sur **J'ai appuyé sur le bouton**. Gladys reçoit son jeton, lit
+   votre maison et liste les appareils dans l'onglet **Découverte**.
+4. Ajoutez les appareils voulus depuis l'onglet **Découverte**.
 
-## Scènes
+Le jeton est gardé dans le volume privé de l'intégration (`/data`), jamais
+dans les journaux. « Gladys » apparaît alors parmi les clients de
+l'application Homematic IP : le supprimer là-bas retire l'accès, et l'état de
+l'intégration demande d'appairer de nouveau.
 
-L'intégration ajoute ses propres cartes à l'éditeur de scènes (Gladys 5.1
-ou plus récent), dans la catégorie **Intégrations** :
+**Relire la maison** lit tout de suite tous les appareils et toutes les
+pièces, et dit combien ont été trouvés (utile après l'ajout d'un appareil dans
+l'application).
 
-- **Mouvement détecté** (déclencheur) — lance la scène quand un détecteur
-  de démonstration voit bouger quelque chose. Choisissez éventuellement le
-  détecteur et ce qui a bougé (personne, animal) ; laissés vides, toute
-  détection correspond. Les actions suivantes peuvent lire ce qui a bougé
-  avec `{{triggerEvent.data.target}}`.
-- **Identifier un appareil** (action) — fait se signaler l'appareil choisi.
-  Elle indique si l'appareil a pu se signaler, pour que les actions
-  suivantes puissent en dépendre.
+### Pilotage de l'alarme
 
-## Tableau de bord
+Lire l'alarme est toujours possible. La modifier est votre choix, dans
+**Pilotage de l'alarme** :
 
-Ajoutez le widget **État de la démo** à un tableau de bord : il affiche en
-direct la température de la station météo et la puissance de la prise du
-bureau, la connexion utilisée par la prise (en orange si dégradée) et la
-position observée. Son bouton **Identifier la lampe** fait se signaler la
-lampe de démonstration.
+- **Lecture seule** (par défaut) : Gladys montre le mode de l'alarme et
+  l'alarme, rien de plus ;
+- **Armer seulement** : Gladys peut armer l'alarme (protection périphérique ou
+  totale), jamais la désarmer ;
+- **Armer et désarmer** : Gladys peut aussi la désarmer.
+
+Le mode de l'alarme n'est jamais un interrupteur qu'un assistant vocal
+pourrait basculer par erreur : il se change par son sélecteur sur l'appareil,
+ou par l'action de scène **Régler l'alarme Homematic IP**, dans ce que ce
+réglage autorise.
+
+## Appareils
+
+Trois sortes d'appareils apparaissent dans l'onglet Découverte.
+
+### Appareils Homematic IP
+
+Un appareil Gladys par appareil Homematic IP, nommé comme dans l'application.
+Ses fonctionnalités dépendent de ce que l'appareil possède, quel que soit son
+modèle :
+
+| Fonctionnalité             | Appareils                                                          | Valeurs                              |
+| -------------------------- | ------------------------------------------------------------------ | ------------------------------------ |
+| Température                | thermostats, capteurs climatiques et météo, STE2 (×2)              | °C                                   |
+| Humidité                   | thermostats muraux, capteurs climatiques et météo                  | %                                    |
+| CO2                        | capteurs de CO2                                                    | ppm                                  |
+| Éclairement                | détecteurs de mouvement et de présence, capteurs de lumière, météo | lux                                  |
+| Vitesse du vent            | capteurs météo                                                     | km/h                                 |
+| Pluie                      | capteurs météo pro/plus, capteur de pluie                          | oui / non                            |
+| Ouverture                  | contacts de fenêtre et de porte, poignées, entrées contact         | ouvert / fermé (entrouvert = ouvert) |
+| Mouvement                  | détecteurs de mouvement                                            | oui / non                            |
+| Présence                   | détecteurs de présence                                             | oui / non                            |
+| Fumée                      | détecteurs de fumée (fumée vue par celui-ci)                       | oui / non                            |
+| Fuite d'eau / Niveau d'eau | détecteurs d'eau                                                   | oui / non                            |
+| Chauffe                    | thermostats de radiateur (vanne ouverte)                           | arrêt / chauffe                      |
+| Commutateur                | prises, actionneurs, interrupteurs encastrés                       | marche / arrêt, pilotable            |
+| Puissance / Énergie        | prises et actionneurs mesurants                                    | W / kWh                              |
+| Lumière / Luminosité       | variateurs                                                         | marche / arrêt, %, pilotable         |
+| Position / Ouvrir/fermer   | volets, stores, protections solaires                               | 0 % fermé à 100 % ouvert             |
+| Bouton                     | interrupteurs muraux, télécommandes, entrées bouton                | appui court, appui long              |
+| Batterie faible / Sabotage | appareils à piles, appareils avec contact d'autoprotection         | oui / non                            |
+
+Un appareil à plusieurs canaux (un actionneur 4 voies, un interrupteur mural
+6 touches) a une fonctionnalité par canal, nommée d'après le nom du canal dans
+l'application ou son numéro. Le point d'accès lui-même, et les appareils que
+cette version ne connaît pas (serrures, sirènes, actionneurs de plancher
+chauffant…), n'apparaissent pas.
+
+Boutons : chaque appui est une nouvelle valeur de la fonctionnalité
+**Bouton** (appui court, appui long, relâchement), utilisable dans le
+déclencheur « état d'un appareil » des scènes Gladys. Le cloud ne signale que
+les appuis des appareils qui les envoient.
+
+### Pièces chauffées
+
+Un appareil par pièce chauffée de l'application, nommé **Chauffage** suivi de
+la pièce :
+
+- **Température** et **Humidité** de la pièce (thermostat mural, ou thermostat
+  de radiateur) ;
+- **Consigne** : la température visée, par demi-degrés, dans les limites de la
+  pièce ;
+- **Mode** : **Automatique** (programme hebdomadaire), **Manuel** ou **Éco** ;
+- **Boost** : les vannes grandes ouvertes pendant la durée de boost réglée dans
+  l'application ;
+- **Fenêtre** : ouverte dès qu'un contact ou le thermostat la voit ouverte ;
+- **Chauffe** : si une vanne de la pièce est ouverte.
+
+### Maison (mode éco et alarme)
+
+Un appareil **Homematic IP** pour toute la maison :
+
+- **Mode éco (absence)** : activé, toutes les pièces sont à leur température
+  éco jusqu'à ce que vous le coupiez (un mode éco ou des vacances lancés depuis
+  l'application s'affichent aussi ici) ;
+- **Mode de l'alarme** : **Désarmée**, **Protection périphérique** ou
+  **Protection totale**, modifiable dans ce que **Pilotage de l'alarme**
+  autorise ;
+- **Alarme** : activée tant que l'alarme sonne.
+
+## Widget
+
+Le widget **Chauffage Homematic IP** montre toute la maison d'un coup d'œil :
+la température **Extérieur** que le cloud connaît pour votre maison, combien de
+pièces sont **En chauffe**, puis chaque pièce avec sa température, sa consigne
+et ce qu'elle fait (fenêtre, boost, éco). Son bouton lance le **Mode éco** de
+toute la maison (avec confirmation) ou, quand il tourne, propose **Fin du mode
+éco**. Dans ses réglages, choisissez les pièces à montrer (toutes si aucune
+n'est choisie).
+
+## Déclencheur de scène
+
+**Alarme Homematic IP déclenchée** : le système d'alarme armé s'est
+déclenché. Filtrez sur le détecteur (n'importe lequel si vide) et sur la
+cause : **Intrusion**, **Fumée**, **Eau**, **Sabotage**, **Autre**. La scène
+reçoit le nom du détecteur et la cause en variables. Une alarme qui sonne déjà
+au démarrage de Gladys ne le déclenche pas.
+
+Tout le reste (une fenêtre ouverte, une touche appuyée, la température d'une
+pièce) est une fonctionnalité d'appareil : utilisez le déclencheur « état d'un
+appareil » de Gladys.
+
+## Actions de scène
+
+- **Lancer le mode éco Homematic IP** : toutes les pièces à leur température
+  éco, pour un nombre d'heures, ou jusqu'à la fin (0).
+- **Lancer le mode vacances Homematic IP** : toutes les pièces à une même
+  température (5 à 30 °C) pendant un nombre de jours, puis retour au
+  programme.
+- **Terminer le mode éco ou vacances Homematic IP** : retour au programme
+  normal.
+- **Régler l'alarme Homematic IP** : désarmée, protection périphérique ou
+  totale, dans ce que **Pilotage de l'alarme** autorise. Elle dit à la scène si
+  le mode a été appliqué, et quels détecteurs l'ont bloqué (une fenêtre
+  ouverte, par exemple).
+
+## Exemples de scènes
+
+- Quand la dernière personne quitte la maison (présence Gladys) : **Lancer le
+  mode éco Homematic IP**, puis **Régler l'alarme Homematic IP** en protection
+  totale ; si le mode n'a pas été appliqué, envoyez-vous un message avec les
+  détecteurs bloquants.
+- Quand **Alarme Homematic IP déclenchée** avec la cause **Intrusion** :
+  allumer toutes les lumières et envoyer un message nommant le détecteur.
+- Quand l'**Ouverture** de la fenêtre de la salle de bain passe à ouvert :
+  couper le **Boost** de la pièce.
+
+## Rafraîchissement et limites du cloud
+
+Le cloud pousse chaque changement dès qu'il arrive (une connexion en direct,
+comme l'application) : les états s'affichent d'habitude en une ou deux
+secondes. En plus, Gladys lit toute la maison au démarrage, au retour de la
+connexion en direct, et toutes les 30 minutes (toutes les 5 minutes tant que
+la connexion en direct est coupée). Gladys n'interroge jamais ces appareils
+elle-même.
+
+Le cloud Homematic IP freine les clients trop bavards et ne publie aucun
+quota : l'intégration envoie au plus 10 requêtes d'un coup, puis une toutes
+les 8 secondes, le rythme du client de référence qu'utilise Home Assistant.
+Une scène qui commande beaucoup d'appareils à la fois peut voir les dernières
+commandes refusées (« Trop de commandes Homematic IP à la suite ») :
+étalez-les, ou utilisez un groupe de l'application.
 
 ## Dépannage
 
-L'intégration journalise tout ce qu'elle fait : consultez les logs de
-l'intégration depuis l'interface Gladys (ou `docker logs` sur l'hôte) avec
-`LOG_LEVEL=debug` pour le détail complet.
+- **« Ce n'est pas un SGTIN »** : le code a 24 caractères, chiffres et lettres
+  A à F. Recopiez-le depuis le dessous du point d'accès.
+- **« Le cloud Homematic IP a refusé la demande »** : vérifiez le SGTIN et, si
+  votre point d'accès a un code PIN, le champ **Code PIN du point d'accès**.
+- **« Le point d'accès n'a pas encore confirmé »** : appuyez sur le bouton
+  bleu du point d'accès, puis cliquez de nouveau sur **J'ai appuyé sur le
+  bouton** juste après.
+- **« Le cloud Homematic IP refuse l'accès de Gladys »** : Gladys a été
+  supprimé des clients dans l'application. Recommencez l'appairage.
+- **« Le point d'accès n'est pas connecté »** : le cloud répond encore, mais
+  avec les dernières valeurs. Vérifiez l'alimentation et le câble réseau du
+  point d'accès.
+- **Un appui sur une touche ne s'affiche pas** : certains appareils n'agissent
+  que sur leurs liens directs et n'envoient rien au cloud ; vérifiez dans
+  l'application que la touche n'est pas seulement liée à un actionneur.
+- Les détails sont dans les journaux de l'intégration ; `LOG_LEVEL=debug` en
+  montre davantage.
+
+## Limites
+
+- Cloud seulement : pas d'API locale du point d'accès (la HCU n'est pas prise
+  en charge), donc pas d'Internet, pas de pilotage.
+- Pas repris dans cette version : serrures, sirènes, actionneurs de plancher
+  chauffant, interfaces de compteur (HmIP-ESI), lumières RGB, modules de porte
+  de garage, lamelles des stores, profils de chauffage.
+- Le refroidissement n'est pas géré.
+- Le déclencheur d'alarme suit l'alarme que le cloud signale pour toute la
+  maison ; les détecteurs de fumée gardent leur propre fonctionnalité
+  **Fumée**.
+- Les noms des fonctionnalités sont fixés à l'ajout d'un appareil : changez la
+  langue avant d'ajouter les appareils.
+- Le jeton est perdu avec le volume `/data` : il faut alors appairer de
+  nouveau.
+
+## Support
+
+Developed without the hardware: feedback welcome. Questions, bugs et
+appareils manquants :
+[github.com/guim31/gladys-homematicip/issues](https://github.com/guim31/gladys-homematicip/issues).
+Ce projet n'a aucun lien avec eQ-3 AG.

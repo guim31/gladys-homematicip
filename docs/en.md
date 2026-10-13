@@ -1,61 +1,228 @@
-# Demo Devices Template
+# Homematic IP
 
-This is the user documentation of the integration. Gladys re-hosts this file
-and shows a permanent **Documentation** link to it in the Configuration screen
-(in the user's language, with English as the fallback) — it is when
-configuring that the user needs it most. Keep the short onboarding hints in
-the `section` blocks of the manifest `config_schema`; put the long
-step-by-step (screenshots, troubleshooting…) here.
+Brings your **Homematic IP** devices (eQ-3) into Gladys through the
+**Homematic IP cloud**, the way the official app reaches them: radiator and
+wall thermostats, heating rooms, window and door contacts, motion, presence,
+smoke and water sensors, plugs and switch actuators with their power, dimmers,
+shutters and blinds, wall switches and remote controls, weather sensors, and
+the alarm system.
 
-## What you get
+> **Developed without the hardware: feedback welcome.** This integration was
+> built from the public protocol and recorded answers of the Homematic IP
+> cloud, without an access point at hand. If something is wrong or missing,
+> please open an issue:
+> [github.com/guim31/gladys-homematicip/issues](https://github.com/guim31/gladys-homematicip/issues).
+> Not affiliated with eQ-3 AG: Homematic IP is a trademark of eQ-3.
 
-Six demo devices show up after installation: a weather station (real data
-from Open-Meteo), a switch, a dimmable light, a smart plug with power
-metering, a motion sensor and a camera.
+## Requirements
+
+- A Homematic IP **access point** (HmIP-HAP, or the HmIP-DRAP wired access
+  point) set up in the Homematic IP app, with its devices already paired.
+- Its **SGTIN**: the 24-character code printed under the access point and on
+  the sticker that came with it (for example `3014-F711-A000-0000-0000-0000`).
+- Internet access for Gladys: everything goes through the Homematic IP cloud.
+- Gladys 5.1 or later.
+
+The Home Control Unit (HCU) with its local "Connect API" is not supported:
+this integration talks to the cloud of the access point.
 
 ## Configuration
 
-1. Open the **Configuration** tab of the integration.
-2. Set the **latitude** and **longitude** the demo weather station should
-   observe (they default to Paris), and pick your temperature unit.
-   The **refresh interval** sets how often the weather station and the
-   plug's power are read: every 5 minutes by default, every minute at most.
-3. Save: the devices appear in the **Discovery** tab, ready to be added.
+Open the **Configuration** tab of the integration.
 
-The **Prefer the local connection** toggle drives the demo plug: it reports
-the channel it actually uses as a badge (local or cloud), with an orange dot
-when it runs degraded (local refused, cloud fallback).
+1. **Access point SGTIN**: type the code printed under the access point
+   (dashes and spaces are allowed), then save.
+2. **Access point PIN**: only if you protected your access point with a PIN
+   in the app. It is used during the pairing only.
+3. **Language of the device names**: the language of the feature names of the
+   devices you add (Temperature, Set point, Opening...). French by default.
+4. **Alarm control**: what Gladys may do with the alarm system (see below).
 
-## Actions
+### Pairing
 
-- **Test the weather provider** — performs a live request to Open-Meteo and
-  shows the current temperature and humidity under the button.
-- **Identify a device** — pick one of your devices in the list and it will
-  signal itself (the demo light "blinks" in the logs).
+1. Click **Start pairing**. Gladys asks the cloud for access, as a new client
+   called "Gladys".
+2. Press the **blue button** on top of the access point.
+3. Click **I pressed the button**. Gladys receives its token, reads your home
+   and lists the devices in the **Discovery** tab.
+4. Add the devices you want from the **Discovery** tab.
 
-## Scenes
+The token is stored in the integration's private volume (`/data`), never in
+the logs. "Gladys" then appears among the clients of the Homematic IP app:
+removing it there revokes the access, and the status of the integration says
+to pair again.
 
-The integration adds its own cards to the scene editor (Gladys 5.1 or
-later), under the **Integrations** category:
+**Read the home again** reads every device and room at once and tells how
+many were found (useful after adding a device in the app).
 
-- **Motion detected** (trigger) — starts the scene when a demo motion sensor
-  sees something move. Optionally pick the sensor and what moved (person,
-  animal); left empty, any detection matches. The following actions can
-  read what moved with `{{triggerEvent.data.target}}`.
-- **Identify a device** (action) — makes the chosen device signal itself.
-  It returns whether the device could signal itself, so the following
-  actions can depend on it.
+### Alarm control
 
-## Dashboard
+Reading the alarm is always possible. Changing it is your choice, in **Alarm
+control**:
 
-Add the **Demo status** widget to a dashboard: it shows the live
-temperature of the weather station and the power of the office plug, the
-connection the plug currently uses (orange when degraded) and the observed
-location. Its **Identify the light** button makes the demo light signal
-itself.
+- **Read only** (default): Gladys shows the alarm mode and the alarm, nothing
+  more;
+- **Arm only**: Gladys may arm the alarm (perimeter or full protection), never
+  disarm it;
+- **Arm and disarm**: Gladys may also disarm it.
+
+The alarm mode is never a switch a voice assistant could flip by mistake: it
+changes from its selector on the device, or from the scene action **Set the
+Homematic IP alarm**, within what this setting allows.
+
+## Devices
+
+Three kinds of devices appear in the Discovery tab.
+
+### Homematic IP devices
+
+One Gladys device per Homematic IP device, named as in the app. Its features
+depend on what the device has, whatever its model:
+
+| Feature                  | Devices                                                  | Values                         |
+| ------------------------ | -------------------------------------------------------- | ------------------------------ |
+| Temperature              | thermostats, climate and weather sensors, STE2 (×2)      | °C                             |
+| Humidity                 | wall thermostats, climate and weather sensors            | %                              |
+| CO2                      | CO2 sensors                                              | ppm                            |
+| Illuminance              | motion, presence, light and weather sensors              | lux                            |
+| Wind speed               | weather sensors                                          | km/h                           |
+| Rain                     | weather sensors pro/plus, rain sensor                    | yes / no                       |
+| Opening                  | window and door contacts, window handles, contact inputs | open / closed (tilted is open) |
+| Motion                   | motion detectors                                         | yes / no                       |
+| Presence                 | presence detectors                                       | yes / no                       |
+| Smoke                    | smoke detectors (smoke seen by this one)                 | yes / no                       |
+| Water leak / Water level | water sensors                                            | yes / no                       |
+| Heating                  | radiator thermostats (valve open)                        | idle / heating                 |
+| Switch                   | plugs, switch actuators, flush-mount switches            | on / off, controllable         |
+| Power / Energy           | measuring plugs and actuators                            | W / kWh                        |
+| Light / Brightness       | dimmers                                                  | on / off, %, controllable      |
+| Position / Open/close    | shutters, blinds, sun shading                            | 0 % closed to 100 % open       |
+| Button                   | wall switches, remote controls, key inputs               | short press, long press        |
+| Low battery / Tamper     | battery devices, devices with a tamper switch            | yes / no                       |
+
+A device with several channels (a 4-way actuator, a 6-key wall switch) has
+one feature per channel, named after the channel label of the app or its
+number. The access point itself, and devices this version does not know
+(door locks, sirens, floor heating actuators...), do not appear.
+
+Buttons: each press is a new value of the **Button** feature (short press,
+long press, release), usable in the "device state" trigger of the Gladys
+scenes. The cloud only reports the presses of the devices that send them.
+
+### Heating rooms
+
+One device per heating room of the app, named **Heating** followed by the
+room:
+
+- **Temperature** and **Humidity** of the room (wall thermostat, or the
+  radiator thermostat);
+- **Set point**: the target temperature, by half degrees, within the limits
+  of the room;
+- **Mode**: **Automatic** (weekly programme), **Manual** or **Eco**;
+- **Boost**: the valves fully open for the boost time set in the app;
+- **Window**: open as soon as a contact or the thermostat sees it open;
+- **Heating**: whether a valve of the room is open.
+
+### Home (eco mode and alarm)
+
+One **Homematic IP** device for the whole home:
+
+- **Eco mode (absence)**: on, every room is at its eco temperature until you
+  switch it off (an eco mode or a vacation started from the app shows here
+  too);
+- **Alarm mode**: **Disarmed**, **Perimeter protection** or **Full
+  protection**, changed within what **Alarm control** allows;
+- **Alarm**: on while the alarm is going off.
+
+## Widget
+
+The **Homematic IP heating** widget shows the whole house at a glance: the
+**Outside** temperature the cloud knows for your home, how many rooms are
+**Heating**, then each room with its temperature, its set point and what it is
+doing (window, boost, eco). Its button starts the **Eco mode** of the whole
+home (with a confirmation) or, when it runs, offers **End eco mode**. In its
+settings, choose the rooms to show (all of them when none is chosen).
+
+## Scene trigger
+
+**Homematic IP alarm triggered**: the armed alarm system went off. Filter on
+the sensor (any when empty) and on the cause: **Intrusion**, **Smoke**,
+**Water**, **Sabotage**, **Other**. The scene receives the sensor name and the
+cause as variables. An alarm already going off when Gladys starts does not
+fire it.
+
+Everything else (a window opened, a key pressed, the temperature of a room) is
+a device feature: use the "device state" trigger of Gladys.
+
+## Scene actions
+
+- **Start the Homematic IP eco mode**: every room at its eco temperature, for
+  a number of hours, or until ended (0).
+- **Start the Homematic IP vacation mode**: every room at one temperature
+  (5 to 30 °C) for a number of days, then back to the programme.
+- **End the Homematic IP eco or vacation mode**: back to the normal programme.
+- **Set the Homematic IP alarm**: disarmed, perimeter or full protection,
+  within what **Alarm control** allows. It tells the scene whether the mode
+  was applied, and which sensors blocked it (an open window, for example).
+
+## Scene examples
+
+- When the last person leaves home (Gladys presence): **Start the Homematic IP
+  eco mode**, then **Set the Homematic IP alarm** to full protection; if the
+  mode was not applied, send yourself a message with the blocking sensors.
+- When the **Homematic IP alarm triggered** with the cause **Intrusion**: turn
+  on every light and send a message naming the sensor.
+- When the **Opening** of the bathroom window goes to open: switch the
+  **Boost** of the room off.
+
+## Refresh and cloud limits
+
+The cloud pushes every change as it happens (a live connection, like the
+app): states usually show within a second or two. On top of that, Gladys reads
+the whole home when it starts, when the live connection comes back, and every
+30 minutes (every 5 minutes while the live connection is down). Gladys never
+polls these devices itself.
+
+The Homematic IP cloud throttles busy clients and publishes no quota: the
+integration sends at most 10 requests at once, then one every 8 seconds, the
+pace of the reference client Home Assistant uses. A scene switching many
+devices at once may see the last commands refused ("Too many Homematic IP
+commands in a row"): spread them, or use a group of the app.
 
 ## Troubleshooting
 
-The integration logs everything it does: check the integration logs from the
-Gladys UI (or `docker logs` on the host) with `LOG_LEVEL=debug` for the full
-detail.
+- **"This is not an SGTIN"**: the code has 24 characters, digits and letters A
+  to F. Copy it from under the access point.
+- **"The Homematic IP cloud refused the request"**: check the SGTIN and, if
+  your access point has a PIN, the **Access point PIN** field.
+- **"The access point has not confirmed yet"**: press the blue button of the
+  access point, then click **I pressed the button** again soon after.
+- **"The Homematic IP cloud refuses the access of Gladys"**: Gladys was
+  removed from the clients in the app. Start the pairing again.
+- **"The access point is not connected"**: the cloud still answers, but with
+  the last values. Check the power and the network cable of the access point.
+- **A key press does not show**: some devices only act on their direct links
+  and send nothing to the cloud; check in the app that the key is not only
+  linked to an actuator.
+- Details are in the integration logs; set `LOG_LEVEL=debug` for more.
+
+## Limits
+
+- Cloud only: no local access point API (the HCU is not supported), so no
+  Internet means no control.
+- Not mapped in this version: door locks, sirens, floor heating actuators,
+  energy sensor interfaces (HmIP-ESI), RGB lights, garage door modules, slats
+  of the blinds, heating profiles.
+- Cooling is not handled.
+- The alarm trigger fires on the alarm the cloud reports for the whole home;
+  the smoke detectors still have their own **Smoke** feature.
+- Feature names are set when a device is added: change the language before
+  adding the devices.
+- The token is lost with the `/data` volume: pair again then.
+
+## Support
+
+Developed without the hardware: feedback welcome. Questions, bugs and missing
+devices:
+[github.com/guim31/gladys-homematicip/issues](https://github.com/guim31/gladys-homematicip/issues).
+This project is not affiliated with eQ-3 AG.
